@@ -119,7 +119,7 @@
 36. Distributed Tracing Demo App — (Available)
   - Cloud focus: Split a workflow across two or more services, propagate trace IDs, and inspect latency across calls.
   - Score: Not graded (0-30)
-37. Kubernetes Mini Lab for a Web API — (Available)
+37. Kubernetes Mini Lab for a Web API — (Taken by Drenit Gashi <drenit2.gashi@universitetiaab.com>; Stack: Docker/Kubernetes service)
   - Cloud focus: Define deployment, service, config map, secret, and autoscaling manifests for a small cloud-hosted API.
   - Score: Not graded (0-30)
 38. Feature Flag Service for Cloud Releases — (Available)
