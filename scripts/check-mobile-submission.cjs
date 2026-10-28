@@ -24,9 +24,71 @@ const names = {
     {label:'PRD e javës 2', files:['java-02.md','java-02.pdf','java-02.docx','java-02.txt']},
     {label:'Skica', files:['skica.jpg','skica.jpeg','skica.png','skica.pdf']}
   ],
-  6: [{label:'Raporti i javës 6',files:['java-06.md']}]
+  6: [{label:'Raporti i javës 6',files:['java-06.md']}],
+  7: [{label:'Raporti i javës 7',files:['java-07.md']}]
 };
-function cacheKey({owner,repo,week},ref) {return `<!-- ${VERSION}:${owner.toLowerCase()}/${repo.toLowerCase()}:${week}:${ref} -->`;}
+function cacheKey({owner,repo,week},ref) {return `<!-- ${week===7?'semester-v7-mvp':VERSION}:${owner.toLowerCase()}/${repo.toLowerCase()}:${week}:${ref} -->`;}
+function week7Case(owner) {
+  let hash=0;
+  for(const character of owner.trim().toLowerCase())hash=(hash*31+character.charCodeAt(0))%1000;
+  return `P7-${String(hash).padStart(3,'0')}`;
+}
+// These helpers inspect report structure only, never whether a student's claims are true.
+function section(text,title,depth=2) {
+  const heading='#'.repeat(depth);
+  const pattern=new RegExp(`^${heading}[ \\t]+${title}[ \\t]*\\r?\\n([\\s\\S]*?)(?=^#{1,${depth}}[ \\t]+|$(?![\\s\\S]))`,'gimu');
+  const matches=[...text.matchAll(pattern)];
+  return matches.length===1?matches[0][1].trim():'';
+}
+function labelledLines(text,label) {
+  return [...text.matchAll(new RegExp(`^[ \\t]*${label}[ \\t]*:[ \\t]*([^\\r\\n]*)$`,'gimu'))].map(match=>match[1].trim());
+}
+function labelledValue(text,label) {
+  const values=labelledLines(text,label);
+  return values.length===1?values[0]:'';
+}
+function week7Evidence(text,owner) {
+  const missing=[];
+  const identity=section(text,'Rasti im');
+  const codes=identity.match(/\bP7-\d{3}\b/giu) || [];
+  if(codes.length!==1 || codes[0].toUpperCase()!==week7Case(owner) || labelledValue(identity,'GitHub').replace(/^@/,'').toLowerCase()!==owner.toLowerCase())missing.push(`Rasti im (${week7Case(owner)}, GitHub: ${owner})`);
+  for(const title of ['Parashikimi','Ndryshimi i ri','Ndihma nga AI'])if(!section(text,title))missing.push(title);
+  const issues=section(text,'Dy probleme');
+  if(!/^[ \t]*1[.)][ \t]+\S.+$/mu.test(issues) || !/^[ \t]*2[.)][ \t]+\S.+$/mu.test(issues))missing.push('Dy probleme (1. dhe 2.)');
+  const correction=section(text,'Korrigjimi');
+  if(!correction.replace(/^[ \t]*Skedari[ \t]*:[^\r\n]*$/gimu,'').trim())missing.push('Korrigjimi (arsyeja)');
+  for(const number of [1,2,3]) {
+    const evidence=section(text,`Prova[ \\t]+${number}`,3);
+    if(['Hapat','Pritshmëria','Vëzhgimi'].some(label=>!labelledValue(evidence,label)))missing.push(`Prova ${number} (Hapat, Pritshmëria, Vëzhgimi)`);
+  }
+  return missing;
+}
+async function week7References(text,{owner,repo},root,paths,ref,github) {
+  const value=labelledValue(section(text,'Korrigjimi'),'Skedari');
+  const source=value.startsWith('`') && value.endsWith('`')?value.slice(1,-1):value;
+  const parts=source.split('/');
+  if(!source || source.startsWith('/') || /[\\:\x00-\x1f]/u.test(source) || parts.some(part=>['','..','.','node_modules','.next'].includes(part)) || !/\.(?:tsx?|jsx?|css)$/iu.test(source) || !source.startsWith(root) || !paths.has(source))return 'Korrigjimi: shkruaj një Skedari: me shteg relativ ndaj repository-t, .tsx/.ts/.js/.jsx/.css, që ekziston brenda projektit (jo node_modules ose .next).';
+  const versions=section(text,'Versionet');
+  const commits=['Para','Pas'].map(label=>{
+    const match=labelledValue(versions,label).match(/^https:\/\/github\.com\/([a-z\d-]+)\/([a-z\d_.-]+)\/commit\/([a-f\d]{40})$/iu);
+    return match && match[1].toLowerCase()===owner.toLowerCase() && match[2].toLowerCase()===repo.toLowerCase()?match[3].toLowerCase():null;
+  });
+  if(commits.some(commit=>!commit) || commits[0]===commits[1])return 'Versionet: plotëso Para: dhe Pas: me dy linke commit të ndryshme nga repository yt; secili SHA duhet të ketë 40 shenja.';
+  const [before,after]=commits;
+  try {
+    // Page 2 omits first-page file patches; only bounded comparison metadata is needed.
+    const comparison=await github.rest.repos.compareCommitsWithBasehead({owner,repo,basehead:`${before}...${after}`,per_page:1,page:2});
+    if(comparison.data.status!=='ahead')return 'Versionet: commit Para duhet të jetë paraardhës i commit Pas; kontrollo rendin e linkeve dhe historikun.';
+    if(after!==ref.toLowerCase()) {
+      const latest=await github.rest.repos.compareCommitsWithBasehead({owner,repo,basehead:`${after}...${ref}`,per_page:1,page:2});
+      if(!['ahead','identical'].includes(latest.data.status))return 'Versionet: commit Pas duhet të jetë në historikun e versionit të kontrolluar në degën kryesore. Bëj Commit → Push origin dhe korrigjo linkun.';
+    }
+  }catch(error) {
+    if(error.status===404)return 'Versionet: një commit nuk u gjet në repository. Kontrollo linket Para/Pas dhe bëj Push origin.';
+    throw error; // Temporary API failures must remain retryable, without a cached verdict.
+  }
+  return '';
+}
 async function checkFiles(submission, github, previousBody='') {
   const {owner,repo,week}=submission;
   const metadata=await github.rest.repos.get({owner,repo});
@@ -49,7 +111,7 @@ async function checkFiles(submission, github, previousBody='') {
       if(result.data.encoding!=='base64'){checks.push({ok:false,message:`${item.label}: nuk u lexua përmbajtja. Ruaje si .md ose .txt të zakonshëm.`});continue;}
       const text=Buffer.from(result.data.content,'base64').toString('utf8');
       if(text.trim().length<80 || /\[PLOTËSO\]/iu.test(text)){checks.push({ok:false,message:`${item.label}: plotëso përgjigjet, hiq shenjat [PLOTËSO] dhe ruaje përsëri. Mos dorëzo modelin bosh.`});continue;}
-      if(week>=3 && week<=6)weeklyReport=text;
+      if(week>=3 && week<=7)weeklyReport=text;
     }
     checks.push({ok:true,message:`${item.label}: skedari u gjet dhe nuk është bosh. Përmbajtja dhe cilësia nuk janë vlerësuar nga ky kontroll.`});
   }
@@ -71,6 +133,20 @@ async function checkFiles(submission, github, previousBody='') {
       }catch{/* Invalid JSON is a failed check; no student code is executed. */}
     }
     checks.push({ok:valid,message:valid?'Projekti Next.js: u gjet package.json me komandat dev/build. Ky kontroll nuk e ekzekuton ose vlerëson aplikacionin.':'Projekti Next.js: mungon package.json i vlefshëm në rrënjë ose në aplikacioni/. Ruaj kodin me GitHub Desktop → Commit → Push origin; mos ngarko ZIP ose node_modules.'});
+    if(week===7) {
+      const missing=week7Evidence(weeklyReport,owner);
+      checks.push({ok:missing.length===0,message:missing.length===0?'Raporti i MVP-së: u gjetën rasti, parashikimi, dy probleme, arsyeja e korrigjimit, tri provat me hapa/pritshmëri/vëzhgime, ndryshimi i ri dhe deklarimi i ndihmës nga AI. Ky është kontroll strukturor; saktësinë e demonstron ti në klasë.':`Raporti i MVP-së: plotëso në java-07.md seksionet ${missing.join('; ')}. Ky kontroll lexon strukturën, jo vërtetësinë e përgjigjeve.`});
+      const treeSha=branch.data.commit.commit?.tree?.sha;
+      if(!treeSha)throw new Error('GitHub nuk ktheu skedarët për Javën 7. Provo përsëri me rikontrollo.');
+      const tree=await github.rest.git.getTree({owner,repo,tree_sha:treeSha,recursive:'1'});
+      if(tree.data.truncated)throw new Error('Repository ka shumë skedarë për kontrollin. Hiq node_modules dhe .next nga GitHub ose kërko ndihmë.');
+      const paths=new Set(tree.data.tree.filter(item=>item.type==='blob').map(item=>item.path));
+      const root=packageFile?.path==='aplikacioni/package.json'?'aplikacioni/':'';
+      const referenceError=await week7References(weeklyReport,submission,root,paths,ref,github);
+      checks.push({ok:!referenceError,message:referenceError || 'Referencat: skedari burimor ekziston dhe commit-et Para/Pas janë në rendin e kërkuar, brenda historikut të versionit të kontrolluar. Kjo nuk provon autorësinë, përdorimin e AI ose funksionimin e korrigjimit.'});
+      const envFiles=[...paths].filter(path=>/(^|\/)\.env(?:$|\.(?!(?:example|sample|template)$))/i.test(path));
+      checks.push({ok:envFiles.length===0,message:envFiles.length===0?'Skedarët privatë: nuk u gjet emër skedari .env i publikuar. Përmbajtja e skedarëve burimorë dhe sekreteve nuk lexohet; kontrolli i emrave nuk zbulon çdo sekret.':`Skedarë privatë në GitHub: ${envFiles.join(', ')}. Ndalo publikimin e kredencialeve, ndërro kredencialet nëse u ekspozuan dhe kërko ndihmën e profesorit. Shto .env* te .gitignore; mos e shkruaj sekretin në Issue.`});
+    }
     if(week===3) {
       const missing=[1,2,3].filter(number=>{
         const section=weeklyReport.match(new RegExp(`^###\\s+Prova\\s+${number}\\b[^\\n]*\\n([\\s\\S]*?)(?=^#{2,3}\\s|$(?![\\s\\S]))`,'mi'))?.[1] || '';

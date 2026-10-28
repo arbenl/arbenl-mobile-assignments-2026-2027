@@ -211,3 +211,168 @@ test('week 6 refuses incomplete recursive trees instead of claiming file checks 
  const {github}=week6Api();github.rest.git.getTree=async()=>({data:{truncated:true,tree:[]}});
  await assert.rejects(checkFiles({owner:'arta',repo:'r',week:6},github),/shumë skedarë/);
 });
+
+const week7Base='1'.repeat(40),week7Final='2'.repeat(40),week7Latest='3'.repeat(40);
+function week7Report(source='src/app/page.tsx') {
+ return `# Java 7 — rishikimi i MVP-së
+## Rasti im
+P7-974
+GitHub: arta
+## Parashikimi
+Pres që lista bosh të shfaqë mesazh kur nuk ka udhëtime.
+## Dy probleme
+1. Lista bosh mbetet pa shpjegim për përdoruesin.
+2. Ora e nisjes nuk lexohet qartë në telefon.
+## Korrigjimi
+Skedari: \`${source}\`
+Shtova mesazhin që përdoruesi të kuptojë pse lista është bosh.
+## Versionet
+Para: https://github.com/arta/r/commit/${week7Base}
+Pas: https://github.com/arta/r/commit/${week7Final}
+### Prova 1
+Hapat: Hapa listën me të dhënat e zakonshme.
+Pritshmëria: Pres kartat me udhëtimet ekzistuese.
+Vëzhgimi: U shfaqën të gjitha kartat e ruajtura.
+### Prova 2
+Hapat: Hoqa udhëtimet nga të dhënat e provës.
+Pritshmëria: Pres mesazhin për listën bosh.
+Vëzhgimi: Mesazhi u shfaq pa shkaktuar gabim.
+### Prova 3
+Hapat: Riktheva të dhënat dhe rifreskova faqen.
+Pritshmëria: Pres rikthimin e kartave të udhëtimit.
+Vëzhgimi: Kartat u rikthyen dhe mesazhi u zhduk.
+## Ndryshimi i ri
+Ndryshova filtrin e qytetit në Prizren sepse dua të provoj listën bosh.
+## Ndihma nga AI
+Nuk përdora AI.
+`;
+}
+function week7Api({nested=false,reportText,reportName='java-07.md',source='src/app/page.tsx',env=[],compareStatus=['ahead','ahead'],compareError,omitSource=false,validPackage=true}={}) {
+ const root=nested?'aplikacioni/':'';const sourcePath=root+source;const calls=[];
+ const github={rest:{repos:{
+  get:async()=>({data:{private:false,default_branch:'main'}}),
+  getBranch:async()=>({data:{commit:{sha:week7Latest,commit:{tree:{sha:'tree-week7'}}}}}),
+  getContent:async args=>{
+   calls.push(['content',args]);assert.equal(args.ref,week7Latest);
+   if(args.path==='')return {data:[file(reportName),nested?{name:'aplikacioni',type:'dir'}:file('package.json')]};
+   if(args.path==='aplikacioni')return {data:[{...file('package.json'),path:root+'package.json'}]};
+   assert.ok([reportName,root+'package.json'].includes(args.path),'never read student source or secrets');
+   const text=args.path===reportName?(reportText??week7Report(sourcePath)):JSON.stringify(validPackage?{dependencies:{next:'16'},scripts:{dev:'next dev',build:'next build'}}:{});
+   return {data:{encoding:'base64',content:Buffer.from(text).toString('base64')}};
+  },
+  compareCommitsWithBasehead:async args=>{
+   const number=calls.filter(([type])=>type==='compare').length;calls.push(['compare',args]);
+   assert.equal(args.owner.toLowerCase(),'arta');assert.equal(args.repo,'r');assert.equal(args.per_page,1);assert.equal(args.page,2,'omit first-page file patches');
+   assert.equal(args.basehead,[`${week7Base}...${week7Final}`,`${week7Final}...${week7Latest}`][number]);
+   if(compareError)throw Object.assign(new Error('comparison unavailable'),{status:compareError});
+   return {data:{status:compareStatus[number]}};
+  }
+ },git:{getTree:async args=>{calls.push(['tree',args]);assert.equal(args.tree_sha,'tree-week7');assert.equal(args.recursive,'1');return {data:{truncated:false,tree:[...(omitSource?[]:[sourcePath]),root+'.env.example',...env].map(path=>({path,type:'blob'}))}};}}}};
+ return {github,calls};
+}
+test('week 7 has five structural checks, pinned reads, source references and at most two comparisons for root/nested apps',async()=>{
+ for(const nested of [false,true]) {
+  const {github,calls}=week7Api({nested});const result=await checkFiles({owner:'arta',repo:'r',week:7},github);
+  assert.equal(result.checks.length,5);assert.ok(result.checks.every(check=>check.ok),JSON.stringify(result.checks));
+  assert.equal(calls.filter(([kind])=>kind==='compare').length,2);assert.equal(calls.filter(([kind])=>kind==='tree').length,1);
+  assert.match(result.checks[3].message,/autor|autorësi/);assert.match(report(result),/jo notë/);
+ }
+});
+test('week 7 requires markdown and rejects unchanged template placeholders',async()=>{
+ for(const settings of [{reportName:'java-07.txt'},{reportText:week7Report().replace('Nuk përdora AI.','[PLOTËSO]')}]){
+  const result=await checkFiles({owner:'arta',repo:'r',week:7},week7Api(settings).github);
+  assert.equal(result.checks[0].ok,false);assert.equal(result.checks[2].ok,false);assert.equal(result.checks[3].ok,false);
+ }
+});
+test('week 7 case assignment uses normalized owner login and rejects mismatched code or login',async()=>{
+ for(const text of [week7Report().replace('P7-974','P7-001'),week7Report().replace('GitHub: arta','GitHub: dikush')]){
+  const result=await checkFiles({owner:'arta',repo:'r',week:7},week7Api({reportText:text}).github);
+  assert.equal(result.checks[2].ok,false);assert.match(result.checks[2].message,/P7-974/);
+ }
+ const upper=week7Report().replace('GitHub: arta','github:  ARTA');
+ assert.equal((await checkFiles({owner:'ARTA',repo:'r',week:7},week7Api({reportText:upper.replaceAll('github.com/arta','github.com/ARTA')}).github)).checks[2].ok,true);
+});
+test('week 7 identifies incomplete sections, two issues and each labelled evidence field',async()=>{
+ for(const replacement of [
+  ['## Parashikimi\nPres që lista bosh të shfaqë mesazh kur nuk ka udhëtime.','## Parashikimi\n'],
+  ['2. Ora e nisjes nuk lexohet qartë në telefon.',''],
+  ['Hapat: Hoqa udhëtimet nga të dhënat e provës.','Hapat:'],
+  ['Pritshmëria: Pres rikthimin e kartave të udhëtimit.',''],
+  ['Vëzhgimi: U shfaqën të gjitha kartat e ruajtura.','Vëzhgimi:'],
+  ['## Ndryshimi i ri\nNdryshova filtrin e qytetit në Prizren sepse dua të provoj listën bosh.',''],
+  ['## Ndihma nga AI\nNuk përdora AI.','']
+ ]) {
+  const result=await checkFiles({owner:'arta',repo:'r',week:7},week7Api({reportText:week7Report().replace(...replacement)}).github);
+  assert.equal(result.checks[2].ok,false,JSON.stringify(replacement));
+ }
+});
+test('week 7 rejects missing, unsafe or excluded source paths and repository-mismatched commit links',async()=>{
+ for(const options of [
+  {omitSource:true},
+  {source:'../app/page.tsx'},
+  {source:'node_modules/a.ts'},
+  {source:'.next/server/a.js'},
+  {source:'public/data.json'},
+  {nested:true,reportText:week7Report()},
+  {reportText:week7Report().replaceAll('github.com/arta/r/commit','github.com/other/r/commit')},
+  {reportText:week7Report().replaceAll('github.com/arta/r/commit','github.com/arta/other/commit')},
+  {reportText:week7Report().replace(week7Final,week7Base)},
+  {reportText:week7Report().replace(week7Final,'abcdef')},
+  {reportText:week7Report().replace('Skedari: `src/app/page.tsx`','Skedari: `src/app/page.tsx`\nSkedari: `src/app/other.tsx`')}
+ ]) {
+  const result=await checkFiles({owner:'arta',repo:'r',week:7},week7Api(options).github);
+  assert.equal(result.checks[3].ok,false,JSON.stringify(options));
+ }
+});
+test('week 7 rejects reversed/diverged/unreachable commits and accepts final equal to pinned latest',async()=>{
+ for(const compareStatus of [['behind','ahead'],['diverged','ahead'],['identical','ahead'],['ahead','behind'],['ahead','diverged']]){
+  const result=await checkFiles({owner:'arta',repo:'r',week:7},week7Api({compareStatus}).github);
+  assert.equal(result.checks[3].ok,false,JSON.stringify(compareStatus));
+ }
+ const {github,calls}=week7Api({reportText:week7Report().replace(week7Final,week7Latest)});
+ github.rest.repos.compareCommitsWithBasehead=async args=>{calls.push(['compare',args]);assert.equal(args.basehead,`${week7Base}...${week7Latest}`);return {data:{status:'ahead'}};};
+ const result=await checkFiles({owner:'arta',repo:'r',week:7},github);
+ assert.equal(result.checks[3].ok,true);assert.equal(calls.filter(([kind])=>kind==='compare').length,1);
+});
+test('week 7 checks env filenames, rejects truncated trees, and never reads env contents',async()=>{
+ const result=await checkFiles({owner:'arta',repo:'r',week:7},week7Api({env:['.env.local','aplikacioni/.env.production']}).github);
+ assert.equal(result.checks[4].ok,false);assert.match(result.checks[4].message,/\.env.local/);
+ const {github}=week7Api();github.rest.git.getTree=async()=>({data:{truncated:true,tree:[]}});
+ await assert.rejects(checkFiles({owner:'arta',repo:'r',week:7},github),/shumë skedarë/);
+});
+test('week 7 missing commits are structural failures; transient comparison errors do not become cached failures',async()=>{
+ const missing=await checkFiles({owner:'arta',repo:'r',week:7},week7Api({compareError:404}).github);
+ assert.equal(missing.checks[3].ok,false);assert.match(missing.checks[3].message,/commit/);
+ for(const status of [403,429,503])await assert.rejects(checkFiles({owner:'arta',repo:'r',week:7},week7Api({compareError:status}).github),error=>error.status===status);
+});
+test('week 7 invalidates its former generic cache without changing old week cache keys',async()=>{
+ const {github,calls}=week7Api();const sub={owner:'arta',repo:'r',week:7};
+ const old=`<!-- semester-v6-pwa:arta/r:7:${week7Latest} -->`;
+ const result=await checkFiles(sub,github,old);assert.equal(result.checks.length,5);assert.match(result.key,/semester-v7-mvp/);
+ const count=calls.length;assert.deepEqual(await checkFiles(sub,github,report(result)),{unchanged:true});assert.equal(calls.length,count);
+ const week6=await checkFiles({...sub,week:6},week6Api().github);assert.match(week6.key,/semester-v6-pwa/);
+});
+test('week 7 accepts CRLF, case/spacing in labels and unquoted source paths',async()=>{
+ const text=week7Report().replace('GitHub: arta','  github : @ARTA').replace('Skedari: `src/app/page.tsx`','skedari : src/app/page.tsx').replace('### Prova 2','### prova 2  ').replaceAll('Hapat:','  hapat :').replaceAll('\n','\r\n');
+ const result=await checkFiles({owner:'arta',repo:'r',week:7},week7Api({reportText:text}).github);
+ assert.ok(result.checks.every(check=>check.ok),JSON.stringify(result.checks));
+});
+test('week 7 API error reports do not suppress a later recheck at the same commit',async()=>{
+ let body;const {github}=week7Api({compareError:503});
+ const submissionIssue=issue('https://github.com/arta/r');submissionIssue.body=submissionIssue.body.replace('Java 1','Java 7');
+ github.rest.issues={get:async()=>({data:submissionIssue}),listComments:()=>{},createComment:async args=>{body=args.body;},updateComment:async args=>{body=args.body;}};
+ github.paginate=async()=>body?[{id:7,user:{login:'github-actions[bot]'},body}]:[];
+ const context={repo:{owner:'arbenl',repo:'course'},issue:{number:1},eventName:'issues'};
+ await run({github,context});assert.match(body,/Provo më vonë/);assert.doesNotMatch(body,/semester-v7-mvp/);
+ github.rest.repos.compareCommitsWithBasehead=async()=>({data:{status:'ahead'}});
+ await run({github,context});assert.match(body,/5\/5 kontrolle teknike/);assert.match(body,/semester-v7-mvp/);
+});
+test('week 7 accepts a CSS correction in root/nested apps only when its file exists',async()=>{
+ for(const nested of [false,true]) {
+  const settings={nested,source:'src/app/globals.css'};
+  const result=await checkFiles({owner:'arta',repo:'r',week:7},week7Api(settings).github);
+  assert.equal(result.checks.length,5);assert.ok(result.checks.every(check=>check.ok),JSON.stringify(result.checks));
+  const missing=await checkFiles({owner:'arta',repo:'r',week:7},week7Api({...settings,omitSource:true}).github);
+  assert.equal(missing.checks[3].ok,false);assert.match(missing.checks[3].message,/\.css/);
+ }
+});

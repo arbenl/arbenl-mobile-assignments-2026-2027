@@ -186,3 +186,7 @@ Në ushtrime zhvillojmë RideShare gjatë semestrit. Secili student krijon një 
 Pas korrigjimit të skedarëve, komento `rikontrollo` në të njëjtin issue. Kontrolli teknik i skedarëve nuk është notë e cilësisë. Nuk përdor AI dhe nuk ekzekuton kodin e studentit. Lexon një version të repository-t përmes GitHub API dhe përditëson një raport, pa grumbulluar pikë nga tentimet.
 
 Kjo rrugë është vetëm për Mobile. Rezervimet dhe dorëzimet Cloud/MCC vazhdojnë me rregullat e tyre.
+
+### Java 7 · kontrolli i MVP-së (Mobile 2026/2027)
+
+Ndiq [udhëzimin e Javës 7](https://arbenl.github.io/lendet/2026-2027/mobile/java-07/ushtrimet.html). Dorëzo `java-07.md` me rastin, parashikimin, dy probleme, korrigjimin, tri prova dhe lidhjet Para/Pas të commit-eve. Push-i i raportit final mund të vijë pas commit-it Pas. Kontrollohen pesë kërkesa teknike, pa ekzekutuar kod ose përdorur AI; shpjegimi dhe demonstrimi verifikohen në klasë. Dorëzimi lejohet edhe gjatë javës.
