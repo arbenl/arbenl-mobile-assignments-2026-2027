@@ -1,4 +1,5 @@
-# Cloud Computing and MCC Project Topics 2026 (IDs 01-60)
+# Cloud Computing and MCC Project Topics 2026 (IDs 01–60)24.
+Log Analytics Explorer — (Taken by Vehbi Durguti <vehbi.durguti@universitetiaab.com>; Stack: Next.js + serverless functions)
 
 > Medium difficulty, suitable for Cloud Computing and Mobile Cloud Computing students.
 > Each topic is first in, first served: reserve exactly one available topic by Pull Request.
