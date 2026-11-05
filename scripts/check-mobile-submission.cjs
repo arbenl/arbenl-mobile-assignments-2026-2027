@@ -136,7 +136,7 @@ async function checkFiles(submission, github, previousBody='') {
     if(week===8) {
       const purposes=['hapjen pa kërkesë lejeje dhe pranimin pas klikimit','refuzimin me vendtakim manual dhe simulimin e pritjes së përfunduar','kontrollin që dëshmitë nuk publikojnë vendndodhjen reale ose sekrete'];
       for(const number of [1,2,3]) {
-        const evidence=section(weeklyReport,`Prova[ \t]+${number}[^\n]*`,3);
+        const evidence=section(weeklyReport,`Prova[ \t]+${number}(?![0-9])[^\n]*`,3);
         const meaningful=evidence.replace(/^[ \t]*(?:[-*][ \t]*)?(?:Hapat|Pritshmëria|Vëzhgimi)[ \t]*:[ \t]*$/gimu,'').trim();
         const ok=meaningful.length>=25;
         checks.push({ok,message:ok?`Prova ${number}: u gjet përshkrimi për ${purposes[number-1]}. Kontrolli lexon tekstin; rezultatin e demonstron ti.`:`Prova ${number}: te java-08.md plotëso seksionin “### Prova ${number}” me hapat, pritshmërinë dhe atë që pe realisht për ${purposes[number-1]}. Mos lër vetëm titullin ose etiketa bosh.`});

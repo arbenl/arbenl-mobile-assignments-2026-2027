@@ -400,3 +400,10 @@ test('week 8 rejects template and malformed package, invalidates old cache',asyn
  const a=week8Api({text:'[PLOTËSO] '.repeat(20),broken:true});const r=await checkFiles({owner:'arta',repo:'r',week:8},a.github);assert.ok(r.checks.every(c=>!c.ok));assert.match(report(r),/Ende asnjë/);
  const b=week8Api();const sub={owner:'arta',repo:'r',week:8};const good=await checkFiles(sub,b.github,'<!-- semester-v6-pwa:arta/r:8:abc -->');assert.equal(good.checks.length,6);assert.deepEqual(await checkFiles(sub,b.github,report(good)),{unchanged:true});
 });
+test('week 8 rejects misnumbered headings and empty labels; accepts CRLF reports',async()=>{
+ const {good}=week8Api();
+ for(const text of [good.replace('### Prova 1:','### Prova 10:'),good.replace(/### Prova 1[^]*?(?=### Prova 2)/,'### Prova 1\nHapat:\nPritshmëria:\nVëzhgimi:\n')]) {
+  const r=await checkFiles({owner:'arta',repo:'r',week:8},week8Api({text}).github);assert.equal(r.checks[2].ok,false);
+ }
+ const r=await checkFiles({owner:'arta',repo:'r',week:8},week8Api({text:good.replaceAll('\n','\r\n')}).github);assert.ok(r.checks.every(c=>c.ok));
+});
