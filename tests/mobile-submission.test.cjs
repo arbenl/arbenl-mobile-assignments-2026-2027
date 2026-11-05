@@ -376,3 +376,27 @@ test('week 7 accepts a CSS correction in root/nested apps only when its file exi
   assert.equal(missing.checks[3].ok,false);assert.match(missing.checks[3].message,/\.css/);
  }
 });
+
+function week8Api({text,broken=false,nested=false}={}) {
+ const good='# Java 8\n'+[1,2,3].map(n=>`### Prova ${n}: kontroll\nHapat: hapa faqen dhe provova veprimin.\nPritshmëria: mesazhi i duhur.\nVëzhgimi: rezultati u regjistrua nga prova ime.\n`).join('')+'\n## Prova me një hyrje të re\n- Hyrja që provova: hapësira\n- Parashikimi im para klikimit: mesazh plotësimi\n- Çfarë pashë realisht: mesazh plotësimi\n- Skedari dhe funksioni që e shpjegojnë: components/Vendtakimi.tsx, konfirmo\n- Çfarë kuptova ose korrigjova: trim heq hapësirat\n';
+ const github=api([]);let reads=0;
+ github.rest.repos.getContent=async({path,ref})=>{
+  reads++;assert.equal(ref,'abc');
+  if(!path)return {data:[file('java-08.md'),nested?{name:'aplikacioni',type:'dir'}:file('package.json')]};
+  if(path==='aplikacioni')return {data:[{...file('package.json'),path:'aplikacioni/package.json'}]};
+  return {data:{encoding:'base64',content:Buffer.from(path.endsWith('package.json')?(broken?'bad':JSON.stringify({dependencies:{next:'16'},scripts:{dev:'next dev',build:'next build'}})):(text??good)).toString('base64')}};
+ };
+ return {github,good,reads:()=>reads};
+}
+test('week 8 reports six bounded structural checks for root and nested projects',async()=>{
+ for(const nested of [false,true]){const a=week8Api({nested});const r=await checkFiles({owner:'arta',repo:'r',week:8},a.github);assert.equal(r.checks.length,6);assert.ok(r.checks.every(c=>c.ok));assert.ok(a.reads()<=4);assert.match(report(r),/Çfarë kaloi/);assert.match(report(r),/Çfarë duhet të përmirësosh/);assert.match(report(r),/Demonstro/);}
+});
+test('week 8 identifies each missing probe and empty new-input field',async()=>{
+ const {good}=week8Api();
+ for(const n of [1,2,3]){const a=week8Api({text:good.replace(new RegExp(`### Prova ${n}[^]*?(?=###|## Prova|$)`),'')});const r=await checkFiles({owner:'arta',repo:'r',week:8},a.github);assert.equal(r.checks[n+1].ok,false);assert.match(r.checks[n+1].message,new RegExp(`Prova ${n}`));}
+ const a=week8Api({text:good.replace('Hyrja që provova: hapësira','Hyrja që provova:')});const r=await checkFiles({owner:'arta',repo:'r',week:8},a.github);assert.equal(r.checks[5].ok,false);assert.match(r.checks[5].message,/Hyrja që provova/);
+});
+test('week 8 rejects template and malformed package, invalidates old cache',async()=>{
+ const a=week8Api({text:'[PLOTËSO] '.repeat(20),broken:true});const r=await checkFiles({owner:'arta',repo:'r',week:8},a.github);assert.ok(r.checks.every(c=>!c.ok));assert.match(report(r),/Ende asnjë/);
+ const b=week8Api();const sub={owner:'arta',repo:'r',week:8};const good=await checkFiles(sub,b.github,'<!-- semester-v6-pwa:arta/r:8:abc -->');assert.equal(good.checks.length,6);assert.deepEqual(await checkFiles(sub,b.github,report(good)),{unchanged:true});
+});

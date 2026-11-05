@@ -27,7 +27,7 @@ const names = {
   6: [{label:'Raporti i javës 6',files:['java-06.md']}],
   7: [{label:'Raporti i javës 7',files:['java-07.md']}]
 };
-function cacheKey({owner,repo,week},ref) {return `<!-- ${week===7?'semester-v7-mvp':VERSION}:${owner.toLowerCase()}/${repo.toLowerCase()}:${week}:${ref} -->`;}
+function cacheKey({owner,repo,week},ref) {return `<!-- ${week===8?'semester-v8-evidence':week===7?'semester-v7-mvp':VERSION}:${owner.toLowerCase()}/${repo.toLowerCase()}:${week}:${ref} -->`;}
 function week7Case(owner) {
   let hash=0;
   for(const character of owner.trim().toLowerCase())hash=(hash*31+character.charCodeAt(0))%1000;
@@ -111,7 +111,7 @@ async function checkFiles(submission, github, previousBody='') {
       if(result.data.encoding!=='base64'){checks.push({ok:false,message:`${item.label}: nuk u lexua përmbajtja. Ruaje si .md ose .txt të zakonshëm.`});continue;}
       const text=Buffer.from(result.data.content,'base64').toString('utf8');
       if(text.trim().length<80 || /\[PLOTËSO\]/iu.test(text)){checks.push({ok:false,message:`${item.label}: plotëso përgjigjet, hiq shenjat [PLOTËSO] dhe ruaje përsëri. Mos dorëzo modelin bosh.`});continue;}
-      if(week>=3 && week<=7)weeklyReport=text;
+      if(week>=3 && week<=8)weeklyReport=text;
     }
     checks.push({ok:true,message:`${item.label}: skedari u gjet dhe nuk është bosh. Përmbajtja dhe cilësia nuk janë vlerësuar nga ky kontroll.`});
   }
@@ -133,6 +133,19 @@ async function checkFiles(submission, github, previousBody='') {
       }catch{/* Invalid JSON is a failed check; no student code is executed. */}
     }
     checks.push({ok:valid,message:valid?'Projekti Next.js: u gjet package.json me komandat dev/build. Ky kontroll nuk e ekzekuton ose vlerëson aplikacionin.':'Projekti Next.js: mungon package.json i vlefshëm në rrënjë ose në aplikacioni/. Ruaj kodin me GitHub Desktop → Commit → Push origin; mos ngarko ZIP ose node_modules.'});
+    if(week===8) {
+      const purposes=['hapjen pa kërkesë lejeje dhe pranimin pas klikimit','refuzimin me vendtakim manual dhe simulimin e pritjes së përfunduar','kontrollin që dëshmitë nuk publikojnë vendndodhjen reale ose sekrete'];
+      for(const number of [1,2,3]) {
+        const evidence=section(weeklyReport,`Prova[ \t]+${number}[^\n]*`,3);
+        const meaningful=evidence.replace(/^[ \t]*(?:[-*][ \t]*)?(?:Hapat|Pritshmëria|Vëzhgimi)[ \t]*:[ \t]*$/gimu,'').trim();
+        const ok=meaningful.length>=25;
+        checks.push({ok,message:ok?`Prova ${number}: u gjet përshkrimi për ${purposes[number-1]}. Kontrolli lexon tekstin; rezultatin e demonstron ti.`:`Prova ${number}: te java-08.md plotëso seksionin “### Prova ${number}” me hapat, pritshmërinë dhe atë që pe realisht për ${purposes[number-1]}. Mos lër vetëm titullin ose etiketa bosh.`});
+      }
+      const changed=section(weeklyReport,'Prova me një hyrje të re');
+      const labels=['Hyrja që provova','Parashikimi im para klikimit','Çfarë pashë realisht','Skedari dhe funksioni që e shpjegojnë','Çfarë kuptova ose korrigjova'];
+      const missing=labels.filter(label=>!labelledValue(changed.replace(/^[ \t]*[-*][ \t]+/gm,''),label));
+      checks.push({ok:missing.length===0,message:missing.length?`Prova me një hyrje të re: plotëso fushat ${missing.join(', ')} te java-08.md. Provoje në aplikacionin tënd dhe shkruaj vëzhgimin real.`:'Prova me një hyrje të re: u gjetën hyrja, parashikimi, vëzhgimi, skedari/funksioni dhe reflektimi. Përgatitu ta përsëritësh dhe ta shpjegosh në klasë.'});
+    }
     if(week===7) {
       const missing=week7Evidence(weeklyReport,owner);
       checks.push({ok:missing.length===0,message:missing.length===0?'Raporti i MVP-së: u gjetën rasti, parashikimi, dy probleme, arsyeja e korrigjimit, tri provat me hapa/pritshmëri/vëzhgime, ndryshimi i ri dhe deklarimi i ndihmës nga AI. Ky është kontroll strukturor; saktësinë e demonstron ti në klasë.':`Raporti i MVP-së: plotëso në java-07.md seksionet ${missing.join('; ')}. Ky kontroll lexon strukturën, jo vërtetësinë e përgjigjeve.`});
@@ -200,11 +213,11 @@ async function checkFiles(submission, github, previousBody='') {
       checks.push({ok:envFiles.length===0,message:envFiles.length===0?'Skedarët privatë: nuk u gjet skedar .env i publikuar. Ky kontroll i emrave nuk zbulon çdo sekret; kontrollo vetë kodin dhe pamjet.':`Skedarë privatë në GitHub: ${envFiles.join(', ')}. Ndalo publikimin e kredencialeve, ndërro kredencialet e Neon/GitHub ose sekretin e sesionit nëse u ekspozuan dhe kërko ndihmën e profesorit. Shto .env* te .gitignore; mos e shkruaj sekretin në Issue.`});
     }
   }
-  return {checks,ref,key};
+  return {checks,ref,key,week};
 }
-function report({checks=[],ref,key,error}={}) {
+function report({checks=[],ref,key,error,week}={}) {
   const count=checks.filter(c=>c.ok).length;
-  return `${MARKER}\n${key || ''}\n## Kontrolli automatik i dorëzimit\n\n${error?'⚠️ '+error:`**${count}/${checks.length} kontrolle teknike kaluan.**\n\n`+checks.map(c=>`${c.ok?'✅':'❌'} ${c.message}`).join('\n\n')}\n\n${ref?`Versioni i kontrolluar: \`${ref}\`.\n\n`:''}Ky është kontroll i dorëzimit, **jo notë**. Kodi nuk ekzekutohet; funksionimi i faqeve dhe cilësia e provave duhet të verifikohen në klasë. PDF/DOCX dhe fotografia kontrollohen vetëm për praninë dhe madhësinë.\n\n**Si e rregulloj?** Hape repository-n tënd → korrigjo skedarët → Commit → Push origin. Pastaj këtu poshtë shkruaj vetëm **rikontrollo** dhe kliko Comment. Përditësohet ky raport; mos hap dorëzim tjetër për të njëjtën javë.\n\n[Udhëzimi me hapa](https://arbenl.github.io/lendet/2026-2027/mobile/dorezimet.html)`;
+  return `${MARKER}\n${key || ''}\n## Kontrolli automatik i dorëzimit\n\n${error?'⚠️ '+error:`**${count}/${checks.length} kontrolle teknike kaluan.**\n\n`+(week===8?['### Çfarë kaloi',...checks.filter(c=>c.ok).map(c=>'✅ '+c.message),...(checks.every(c=>!c.ok)?['Ende asnjë kontroll nuk kaloi.']:[]),'### Çfarë duhet të përmirësosh',...checks.filter(c=>!c.ok).map(c=>'❌ '+c.message),...(checks.every(c=>c.ok)?['Të gjitha kontrollet strukturore kaluan. Demonstro pranimin/refuzimin, vendtakimin manual dhe përfundimin e pritjes në aplikacion.']:[])].join('\n\n'):checks.map(c=>`${c.ok?'✅':'❌'} ${c.message}`).join('\n\n'))}\n\n${ref?`Versioni i kontrolluar: \`${ref}\`.\n\n`:''}Ky është kontroll i dorëzimit, **jo notë**. Kodi nuk ekzekutohet; funksionimi i faqeve dhe cilësia e provave duhet të verifikohen në klasë. PDF/DOCX dhe fotografia kontrollohen vetëm për praninë dhe madhësinë.\n\n**Si e rregulloj?** Hape repository-n tënd → korrigjo skedarët → Commit → Push origin. Pastaj këtu poshtë shkruaj vetëm **rikontrollo** dhe kliko Comment. Përditësohet ky raport; mos hap dorëzim tjetër për të njëjtën javë.\n\n[Udhëzimi me hapa](https://arbenl.github.io/lendet/2026-2027/mobile/dorezimet.html)`;
 }
 async function run({github,context}) {
   const args={...context.repo,issue_number:context.issue.number};
