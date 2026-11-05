@@ -2,10 +2,10 @@ name: Mobile checker tests
 on:
   workflow_dispatch:
   pull_request:
-    paths: ['scripts/check-mobile-submission.cjs', 'tests/mobile-submission.test.cjs', '.github/workflows/mobile-*.yml']
+    paths: ['scripts/check-mobile-submission.cjs', 'scripts/mobile-runtime/**', 'tests/mobile-submission.test.cjs', 'tests/mobile-runtime.test.cjs', '.github/workflows/mobile-*.yml']
   push:
     branches: [main]
-    paths: ['scripts/check-mobile-submission.cjs', 'tests/mobile-submission.test.cjs', '.github/workflows/mobile-*.yml']
+    paths: ['scripts/check-mobile-submission.cjs', 'scripts/mobile-runtime/**', 'tests/mobile-submission.test.cjs', 'tests/mobile-runtime.test.cjs', '.github/workflows/mobile-*.yml']
 permissions:
   contents: read
 jobs:
@@ -16,4 +16,4 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - run: node --test tests/mobile-submission.test.cjs
+      - run: node --test tests/mobile-submission.test.cjs tests/mobile-runtime.test.cjs

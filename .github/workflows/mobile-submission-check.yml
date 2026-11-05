@@ -26,3 +26,94 @@ jobs:
         with:
           script: |
             await require('./scripts/check-mobile-submission.cjs').run({github, context});
+
+  runtime-prepare:
+    if: >-
+      !github.event.issue.pull_request &&
+      startsWith(github.event.issue.title, '[MOBILE DORËZIM]') &&
+      (github.event_name == 'issues' || (github.event.comment.body == 'rikontrollo' && github.event.comment.user.login == github.event.issue.user.login))
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      contents: read
+      issues: read
+    outputs:
+      meta: ${{ steps.prepare.outputs.meta }}
+      status: ${{ steps.prepare.outputs.status }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/github-script@v7
+        id: prepare
+        with:
+          script: |
+            const meta = await require('./scripts/mobile-runtime/control.cjs').prepare({github, context});
+            core.setOutput('meta', JSON.stringify(meta));
+            core.setOutput('status', meta.status);
+
+  runtime-browser:
+    needs: runtime-prepare
+    if: needs.runtime-prepare.outputs.status == 'ready'
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install trusted browser tools
+        run: |
+          npm ci --ignore-scripts --prefix scripts/mobile-runtime
+          scripts/mobile-runtime/node_modules/.bin/playwright install --with-deps chromium
+      - name: Test student code in isolated container
+        env:
+          STUDENT_REPO: ${{ fromJSON(needs.runtime-prepare.outputs.meta).repository }}
+          STUDENT_SHA: ${{ fromJSON(needs.runtime-prepare.outputs.meta).ref }}
+          STUDENT_ROOT: ${{ fromJSON(needs.runtime-prepare.outputs.meta).root }}
+        run: bash scripts/mobile-runtime/run.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mobile-week08-runtime
+          path: runtime-result/
+          retention-days: 7
+          if-no-files-found: ignore
+
+  runtime-feedback:
+    needs: [runtime-prepare, runtime-browser]
+    if: >-
+      always() &&
+      (needs.runtime-prepare.outputs.status == 'ready' || needs.runtime-prepare.outputs.status == 'setup')
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      contents: read
+      issues: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        if: needs.runtime-prepare.outputs.status == 'ready'
+        continue-on-error: true
+        with:
+          name: mobile-week08-runtime
+          path: runtime-result/
+      - uses: actions/github-script@v7
+        env:
+          RUNTIME_META: ${{ needs.runtime-prepare.outputs.meta }}
+        with:
+          script: |
+            const fs = require('node:fs');
+            let result;
+            try {
+              const file = 'runtime-result/result.json';
+              if(fs.statSync(file).size < 10000) result = JSON.parse(fs.readFileSync(file,'utf8'));
+            } catch {}
+            await require('./scripts/mobile-runtime/control.cjs').publish({github, context, meta:JSON.parse(process.env.RUNTIME_META), result});
