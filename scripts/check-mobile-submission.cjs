@@ -27,7 +27,7 @@ const names = {
   6: [{label:'Raporti i javës 6',files:['java-06.md']}],
   7: [{label:'Raporti i javës 7',files:['java-07.md']}]
 };
-function cacheKey({owner,repo,week},ref) {return `<!-- ${week===8?'semester-v8-evidence':week===7?'semester-v7-mvp':VERSION}:${owner.toLowerCase()}/${repo.toLowerCase()}:${week}:${ref} -->`;}
+function cacheKey({owner,repo,week},ref) {return `<!-- ${week===8?'semester-v8-evidence2':week===7?'semester-v7-mvp':VERSION}:${owner.toLowerCase()}/${repo.toLowerCase()}:${week}:${ref} -->`;}
 function week7Case(owner) {
   let hash=0;
   for(const character of owner.trim().toLowerCase())hash=(hash*31+character.charCodeAt(0))%1000;
